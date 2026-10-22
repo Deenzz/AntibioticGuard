@@ -1,0 +1,1176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>AntibioticGuard PrimaryCare Suite - MOH NAG (Malaysia) Stewardship Engine</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <!-- Lucide Icons CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/lucide@0.263.1/dist/umd/lucide.min.js"></script>
+  <!-- jsPDF CDN for Delayed Prescription Leaflet Generation -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            steward: {
+              50: '#ecfdf5',
+              100: '#d1fae5',
+              500: '#10b981',
+              600: '#059669',
+              700: '#047857',
+              800: '#065f46',
+              900: '#064e3b',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- ==========================================
+       PROTECTIONS, STYLING & MOBILE ERGONOMICS
+       ========================================== -->
+  <style>
+    /* Prevent text selection across general UI */
+    body {
+      -webkit-user-select: none !important;
+      -moz-user-select: none !important;
+      -ms-user-select: none !important;
+      user-select: none !important;
+    }
+    input, textarea, select {
+      -webkit-user-select: auto !important;
+      -moz-user-select: auto !important;
+      -ms-user-select: auto !important;
+      user-select: auto !important;
+    }
+
+    .flow-node { transition: all 0.2s ease-in-out; }
+    .flow-node:hover { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); }
+    .badge-pulse { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
+
+    /* Dark Theme */
+    html.dark { color-scheme: dark; }
+    html.dark body { background: #0c1017; color: #e2e8f0; }
+    html.dark .bg-white { background-color: #151c28; }
+    html.dark .bg-slate-50 { background-color: #1a2332; }
+    html.dark .bg-slate-100 { background-color: #222d40; }
+    html.dark .bg-emerald-50 { background-color: #0b291e; }
+    html.dark .bg-rose-50 { background-color: #35141c; }
+    html.dark .bg-amber-50 { background-color: #33240e; }
+    html.dark .bg-sky-50 { background-color: #0c2336; }
+    html.dark .text-slate-900 { color: #f8fafc; }
+    html.dark .text-slate-800 { color: #e2e8f0; }
+    html.dark .text-slate-700 { color: #cbd5e1; }
+    html.dark .text-slate-600 { color: #94a3b8; }
+    html.dark .border-slate-200, html.dark .border-slate-100 { border-color: #2a374d; }
+    html.dark input, html.dark select { background-color: #1a2332; color: #f1f5f9; border-color: #3b4d6b; }
+    html.dark nav .bg-white { background-color: #2a374d; color: #f8fafc; }
+
+    :root {
+      box-sizing: border-box;
+      padding-top: env(safe-area-inset-top, 0px);
+      padding-bottom: env(safe-area-inset-bottom, 0px);
+    }
+
+    @media (max-width: 640px) {
+      .mobile-center-wrap {
+        width: 100%;
+        max-width: 34rem;
+        margin-left: auto;
+        margin-right: auto;
+      }
+      header > div {
+        display: flex;
+        flex-direction: column;
+        align-items: center !important;
+        text-align: center;
+        padding-top: 14px;
+        padding-bottom: 14px;
+      }
+      #mobile-nav-bar {
+        position: fixed;
+        left: 0; right: 0; bottom: 0;
+        z-index: 60;
+        display: flex;
+        justify-content: space-around;
+        align-items: center;
+        padding: 6px 8px calc(6px + env(safe-area-inset-bottom, 0px));
+        box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.15);
+        border-top: 1px solid rgba(148, 163, 184, 0.25);
+      }
+      #mobile-nav-bar button {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 3px;
+        padding: 6px 2px;
+        font-size: 11px;
+        font-weight: 600;
+      }
+      main {
+        padding-left: 12px;
+        padding-right: 12px;
+        padding-bottom: 9.5rem !important;
+      }
+      main input:not([type=checkbox]), main select {
+        font-size: 16px !important;
+        min-height: 44px;
+      }
+      main input[type=checkbox] {
+        width: 22px; height: 22px; flex-shrink: 0;
+      }
+      main .text-xs { font-size: 13px; line-height: 1.45; }
+    }
+
+    @media print {
+      header, nav, #mobile-nav-bar, footer, .no-print, #m-result-bar { display: none !important; }
+      html.dark body, body { background: #fff !important; color: #000 !important; }
+      body.print-leaflet main > section:not(#tab-content-delayed) { display: none !important; }
+    }
+  </style>
+
+  <!-- ==========================================
+       ANTI-INSPECTION DEFENSE SCRIPT
+       ========================================== -->
+  <script>
+    document.addEventListener('contextmenu', e => e.preventDefault());
+    document.addEventListener('keydown', e => {
+      if (e.key === 'F12' || e.keyCode === 123) e.preventDefault();
+      const ctrl = e.ctrlKey || e.metaKey;
+      if (ctrl && (e.key === 'u' || e.key === 'U' || e.keyCode === 85)) e.preventDefault();
+      if (ctrl && e.shiftKey && (e.key === 'i' || e.key === 'I' || e.keyCode === 73)) e.preventDefault();
+      if (ctrl && e.shiftKey && (e.key === 'j' || e.key === 'J' || e.keyCode === 74)) e.preventDefault();
+      if (ctrl && e.shiftKey && (e.key === 'c' || e.key === 'C' || e.keyCode === 67)) e.preventDefault();
+      if (ctrl && (e.key === 's' || e.key === 'S' || e.keyCode === 83)) e.preventDefault();
+    });
+    document.addEventListener('dragstart', e => { if (e.target.tagName === 'IMG') e.preventDefault(); });
+    setInterval(() => { (function(){ return false; }['constructor']('debugger')()); }, 100);
+
+    (function(){
+      var t; try { t = localStorage.getItem('abx-theme'); } catch(e){}
+      if(!t) t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      document.documentElement.classList.toggle('dark', t === 'dark');
+    })();
+  </script>
+</head>
+
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col font-sans antialiased selection:bg-emerald-600 selection:text-white">
+
+  <!-- NOSCRIPT SHIELD -->
+  <noscript>
+    <div class="min-h-screen flex items-center justify-center p-6 text-center">
+      <div class="bg-white border border-rose-300 rounded-2xl p-8 max-w-md shadow-xl">
+        <h1 class="text-lg font-bold text-slate-900 mb-2">JavaScript Required</h1>
+        <p class="text-xs text-slate-600 leading-relaxed">
+          The Antibiotic Stewardship Selector requires JavaScript to calculate clinical scores and verify Malaysian National Antimicrobial Guidelines. Please enable JavaScript in your browser settings.
+        </p>
+      </div>
+    </div>
+  </noscript>
+
+  <div id="app-root" class="flex-1 flex flex-col">
+    <!-- TOP CLINICAL HEADER -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm transition-colors duration-200">
+      <div class="max-w-7xl mx-auto px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left">
+        
+        <!-- BRANDING -->
+        <div class="flex flex-col sm:flex-row items-center gap-3">
+          <div class="bg-emerald-600 text-white p-2.5 rounded-xl shadow-md flex items-center justify-center">
+            <i data-lucide="shield-check" class="w-6 h-6"></i>
+          </div>
+          <div class="flex flex-col items-center sm:items-start">
+            <div class="flex flex-wrap items-center justify-center sm:justify-start gap-2">
+              <h1 class="text-xl font-extrabold tracking-tight text-slate-900">AntibioticGuard PrimaryCare</h1>
+              <span class="bg-emerald-100 text-emerald-800 text-[11px] font-bold px-2.5 py-0.5 rounded-full border border-emerald-200">MOH NAG Malaysia</span>
+            </div>
+            <p class="text-xs text-slate-500 mt-0.5">Rational Antimicrobial Selector • GP &amp; Emergency Clinical Decision Support</p>
+          </div>
+        </div>
+        
+        <!-- HEADER ACTIONS -->
+        <div class="flex items-center justify-center gap-2 no-print w-full sm:w-auto">
+          <button id="theme-btn" onclick="toggleTheme()" class="flex-1 sm:flex-initial px-3.5 py-2 rounded-xl border border-slate-200 bg-white dark:bg-slate-800 text-xs font-semibold flex items-center justify-center gap-1.5 shadow-sm active:scale-95 transition">
+            <i data-lucide="moon" class="w-4 h-4"></i> <span>Dark</span>
+          </button>
+          <button onclick="saveLeafletPdf()" class="flex-1 sm:flex-initial px-3.5 py-2 rounded-xl bg-emerald-700 text-white text-xs font-semibold flex items-center justify-center gap-1.5 hover:bg-emerald-800 shadow-sm active:scale-95 transition">
+            <i data-lucide="file-down" class="w-4 h-4"></i> <span>Export Viral Leaflet</span>
+          </button>
+        </div>
+
+        <!-- DESKTOP NAV -->
+        <nav class="hidden sm:flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl text-xs sm:text-sm font-medium">
+          <button onclick="switchTab('centor')" id="tab-btn-centor-d" class="px-3 py-1.5 rounded-lg bg-white shadow-sm text-slate-900 flex items-center gap-1.5 transition">
+            <i data-lucide="calculator" class="w-4 h-4 text-emerald-600"></i> Centor / McIsaac
+          </button>
+          <button onclick="switchTab('lookup')" id="tab-btn-lookup-d" class="px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 flex items-center gap-1.5 transition">
+            <i data-lucide="search" class="w-4 h-4 text-blue-600"></i> Disease Lookup
+          </button>
+          <button onclick="switchTab('allergy')" id="tab-btn-allergy-d" class="px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 flex items-center gap-1.5 transition">
+            <i data-lucide="alert-triangle" class="w-4 h-4 text-amber-600"></i> Penicillin Allergy
+          </button>
+          <button onclick="switchTab('investigations')" id="tab-btn-investigations-d" class="px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 flex items-center gap-1.5 transition">
+            <i data-lucide="flask-conical" class="w-4 h-4 text-sky-600"></i> Labs & Red Flags
+          </button>
+          <button onclick="switchTab('delayed')" id="tab-btn-delayed-d" class="px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 flex items-center gap-1.5 transition">
+            <i data-lucide="printer" class="w-4 h-4 text-rose-600"></i> Viral Patient Leaflet
+          </button>
+        </nav>
+      </div>
+    </header>
+
+    <!-- MAIN BODY -->
+    <main class="max-w-7xl mx-auto px-4 py-5 sm:py-6 flex-1 w-full space-y-6">
+
+      <!-- ==================== TAB 1: CENTOR / MCISAAC CALCULATOR ==================== -->
+      <section id="tab-content-centor" class="space-y-6 mobile-center-wrap">
+        
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          
+          <!-- INPUT FORM (LEFT 7 COLS) -->
+          <div class="lg:col-span-7 bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-sm space-y-5 text-left">
+            <div class="flex items-center justify-between border-b pb-3">
+              <div>
+                <h3 class="font-bold text-slate-900 text-sm flex items-center gap-2">
+                  <i data-lucide="stethoscope" class="w-4 h-4 text-emerald-600"></i>
+                  Centor / McIsaac Sore Throat Triage Calculator
+                </h3>
+                <p class="text-xs text-slate-500">Differentiates viral pharyngitis from Group A Strep (GABHS) to prevent unnecessary amoxicillin</p>
+              </div>
+              <button onclick="resetCentorForm()" class="text-xs text-slate-500 hover:text-rose-600 flex items-center gap-1 active:scale-95 transition">
+                <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i> Clear
+              </button>
+            </div>
+
+            <!-- AGE SELECTION (MCISAAC MODIFIER) -->
+            <div>
+              <label class="block font-bold text-slate-800 text-xs uppercase tracking-wide mb-1">1. Patient Age Group (McIsaac Criteria)</label>
+              <select id="centor-age" class="w-full px-3 py-2 border rounded-xl text-xs bg-white font-semibold" onchange="runCentorCalc()">
+                <option value="child">Child (3 to 14 Years) [+1 Point]</option>
+                <option value="adult" selected>Adult (15 to 44 Years) [0 Points]</option>
+                <option value="older">Older Adult (&ge; 45 Years) [-1 Point]</option>
+              </select>
+            </div>
+
+            <!-- CENTOR CLINICAL CRITERIA CHECKBOXES -->
+            <div class="space-y-2.5 text-xs">
+              <label class="block font-bold text-slate-800 uppercase tracking-wide mb-1">2. Clinical Signs Present (1 Point Each)</label>
+              
+              <label class="flex items-center gap-2.5 p-3 bg-slate-50 border rounded-xl hover:bg-slate-100 cursor-pointer transition">
+                <input type="checkbox" id="c-fever" class="rounded text-emerald-600" onchange="runCentorCalc()" checked>
+                <div>
+                  <span class="font-bold text-slate-900 block">History of High Fever or Measured Temp &gt; 38.0°C</span>
+                  <span class="text-[11px] text-slate-500">Sudden acute onset of fever with rigors or chills (+1)</span>
+                </div>
+              </label>
+
+              <label class="flex items-center gap-2.5 p-3 bg-slate-50 border rounded-xl hover:bg-slate-100 cursor-pointer transition">
+                <input type="checkbox" id="c-no-cough" class="rounded text-emerald-600" onchange="runCentorCalc()" checked>
+                <div>
+                  <span class="font-bold text-slate-900 block">Absence of Cough / Rhinitis / Conjunctivitis</span>
+                  <span class="text-[11px] text-slate-500">Cough, runny nose, and hoarseness strongly favor VIRAL etiology (+1)</span>
+                </div>
+              </label>
+
+              <label class="flex items-center gap-2.5 p-3 bg-slate-50 border rounded-xl hover:bg-slate-100 cursor-pointer transition">
+                <input type="checkbox" id="c-nodes" class="rounded text-emerald-600" onchange="runCentorCalc()">
+                <div>
+                  <span class="font-bold text-slate-900 block">Swollen, Tender Anterior Cervical Lymph Nodes</span>
+                  <span class="text-[11px] text-slate-500">Palpable tender submandibular or anterior cervical adenopathy (+1)</span>
+                </div>
+              </label>
+
+              <label class="flex items-center gap-2.5 p-3 bg-slate-50 border rounded-xl hover:bg-slate-100 cursor-pointer transition">
+                <input type="checkbox" id="c-exudate" class="rounded text-emerald-600" onchange="runCentorCalc()">
+                <div>
+                  <span class="font-bold text-slate-900 block">Tonsillar Swelling or Purulent Exudates</span>
+                  <span class="text-[11px] text-slate-500">Erythematous enlarged tonsils with confluent whitish-yellow exudate (+1)</span>
+                </div>
+              </label>
+            </div>
+
+            <!-- RED FLAG PHYSICAL SIGNS -->
+            <div class="p-3 bg-rose-50 border border-rose-200 rounded-xl space-y-1.5 text-xs text-rose-900">
+              <span class="font-bold flex items-center gap-1.5 text-rose-950">
+                <i data-lucide="alert-octagon" class="w-4 h-4 text-rose-600"></i>
+                Emergency Red Flag Check: Quinsy &amp; Airway Compromise
+              </span>
+              <p class="text-[11px] leading-relaxed">
+                If the patient has <b>trismus (inability to open mouth), hot-potato muffled voice, uvular deviation, severe unilateral swelling, or stridor</b>, suspect <b>Peritonsillar Abscess (Quinsy)</b> or <b>Epiglottitis</b>. Do NOT treat as simple sore throat—refer immediately to ENT / Hospital ED!
+              </p>
+            </div>
+
+          </div>
+
+          <!-- COMPUTED RESULT CARD (RIGHT 5 COLS) -->
+          <div class="lg:col-span-5 space-y-4">
+            
+            <div id="centor-result-card" class="bg-emerald-50 border-2 border-emerald-500 rounded-2xl p-4 sm:p-5 shadow-sm transition-all duration-300 text-center sm:text-left">
+              <div class="flex flex-col sm:flex-row items-center justify-between gap-2">
+                <span id="centor-score-badge" class="bg-emerald-600 text-white font-bold text-xs uppercase px-3 py-1.5 rounded-lg shadow-sm">
+                  SCORE 2 • LOW-INTERMEDIATE RISK
+                </span>
+                <span id="centor-risk-pct" class="text-xs font-semibold text-emerald-800">Strep Risk: ~15%</span>
+              </div>
+
+              <h3 id="centor-verdict-title" class="text-base sm:text-lg font-extrabold text-slate-900 mt-3">
+                Viral Pharyngitis Highly Likely
+              </h3>
+
+              <p id="centor-verdict-desc" class="text-xs text-slate-700 mt-2 leading-relaxed">
+                The likelihood of Group A Strep infection is low. Antibiotics are not recommended. Provide symptomatic analgesia, lozenges, and delayed safety-net advice.
+              </p>
+
+              <!-- SCORE TILES -->
+              <div class="mt-4 p-3 bg-white/90 dark:bg-slate-800/90 rounded-xl border border-slate-200 grid grid-cols-2 gap-2 text-center text-xs">
+                <div>
+                  <span class="text-[10px] text-slate-500 block">McIsaac Score</span>
+                  <span id="calc-centor-total" class="font-bold text-slate-900 text-base">2 Points</span>
+                </div>
+                <div>
+                  <span class="text-[10px] text-slate-500 block">Strep Likelihood</span>
+                  <span id="calc-centor-prob" class="font-bold text-emerald-700 text-base">15 – 17%</span>
+                </div>
+              </div>
+
+              <!-- ACTION PROTOCOL -->
+              <div class="mt-4 pt-4 border-t border-emerald-200/60 text-left">
+                <h4 class="text-xs font-bold text-slate-800 uppercase tracking-wider mb-2.5">
+                  MOH Stewardship Prescription Plan
+                </h4>
+                <ul id="centor-plan-list" class="text-xs text-slate-700 space-y-2.5">
+                  <!-- Populated by JS -->
+                </ul>
+              </div>
+
+            </div>
+
+          </div>
+        </div>
+
+      </section>
+
+      <!-- ==================== TAB 2: COMMON DISEASE SEARCH & LOOKUP ==================== -->
+      <section id="tab-content-lookup" class="hidden space-y-6 mobile-center-wrap">
+        
+        <div class="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-sm space-y-4 text-left">
+          
+          <!-- SEARCH BAR -->
+          <div class="flex flex-col sm:flex-row items-center justify-between gap-3 border-b pb-4">
+            <div>
+              <h2 class="text-base font-bold text-slate-900 flex items-center gap-2">
+                <i data-lucide="book-open" class="w-5 h-5 text-blue-600"></i>
+                Indication-Specific Antibiotic Dosing Database
+              </h2>
+              <p class="text-xs text-slate-500">MOH National Antimicrobial Guideline (NAG) • Primary Care &amp; Emergency Regimens</p>
+            </div>
+            
+            <div class="relative w-full sm:w-72">
+              <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-3"></i>
+              <input type="text" id="disease-search-input" placeholder="Search disease, drug, or symptom..." class="w-full pl-9 pr-3 py-2 border rounded-xl text-xs bg-slate-50 dark:bg-slate-800 focus:bg-white" oninput="filterDiseases()">
+            </div>
+          </div>
+
+          <!-- DISEASE CARDS CONTAINER -->
+          <div id="disease-cards-grid" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <!-- Populated dynamically via JS -->
+          </div>
+
+        </div>
+
+      </section>
+
+      <!-- ==================== TAB 3: PENICILLIN ALLERGY ENGINE ==================== -->
+      <section id="tab-content-allergy" class="hidden space-y-6 mobile-center-wrap">
+        
+        <div class="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-sm space-y-5 text-left">
+          <div class="border-b pb-3">
+            <h2 class="text-base font-bold text-slate-900 flex items-center gap-2">
+              <i data-lucide="alert-triangle" class="w-5 h-5 text-amber-600"></i>
+              Penicillin Allergy De-Labeling &amp; Alternative Selector
+            </h2>
+            <p class="text-xs text-slate-500">Over 90% of labeled penicillin allergies are false or non-IgE mediated. Differentiate safely to avoid inappropriate reserve antibiotics.</p>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+            
+            <!-- ALLERGY CLASSIFIER FORM -->
+            <div class="md:col-span-1 space-y-3 p-4 bg-slate-50 rounded-xl border">
+              <h4 class="font-bold text-slate-900 text-xs uppercase tracking-wide">Patient Reaction History</h4>
+              
+              <div>
+                <label class="block font-medium text-slate-700 mb-1">Onset Time After First Dose</label>
+                <select id="allergy-onset" class="w-full px-3 py-2 border rounded-xl bg-white" onchange="runAllergyEval()">
+                  <option value="immediate" selected>Immediate (&lt; 1 Hour)</option>
+                  <option value="delayed">Delayed (&gt; 48 Hours to Days)</option>
+                  <option value="childhood">Vague childhood rash (&gt;10 years ago)</option>
+                </select>
+              </div>
+
+              <div>
+                <label class="block font-medium text-slate-700 mb-1">Severe Anaphylaxis Symptoms</label>
+                <div class="space-y-1 mt-1">
+                  <label class="flex items-center gap-2">
+                    <input type="checkbox" id="alg-wheeze" class="rounded text-rose-600" onchange="runAllergyEval()" checked>
+                    <span>Wheeze / Dyspnea / Stridor</span>
+                  </label>
+                  <label class="flex items-center gap-2">
+                    <input type="checkbox" id="alg-angio" class="rounded text-rose-600" onchange="runAllergyEval()" checked>
+                    <span>Lip / Tongue / Facial Swelling</span>
+                  </label>
+                  <label class="flex items-center gap-2">
+                    <input type="checkbox" id="alg-hypotension" class="rounded text-rose-600" onchange="runAllergyEval()">
+                    <span>Collapse / Shock / Low BP</span>
+                  </label>
+                </div>
+              </div>
+
+              <div>
+                <label class="block font-medium text-slate-700 mb-1">Skin Manifestations</label>
+                <select id="allergy-skin" class="w-full px-3 py-2 border rounded-xl bg-white" onchange="runAllergyEval()">
+                  <option value="urticaria" selected>Urticaria (Itchy wheals / Hives)</option>
+                  <option value="maculopapular">Maculopapular rash (Flat, non-itchy)</option>
+                  <option value="scar">Blistering / SJS / TEN / Skin peeling</option>
+                  <option value="none">No rash (Nausea/Diarrhea only)</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- EVALUATION OUTPUT -->
+            <div class="md:col-span-2 space-y-3 p-4 bg-white dark:bg-slate-800 rounded-xl border">
+              <div class="flex items-center justify-between border-b pb-2">
+                <span id="allergy-badge" class="bg-rose-700 text-white font-bold text-xs uppercase px-3 py-1 rounded-lg">
+                  TYPE I IgE-MEDIATED ANAPHYLAXIS RISK
+                </span>
+                <span id="cephp-risk-badge" class="text-xs font-semibold text-rose-700">Cephalosporin Cross-Reactivity: ~1-2%</span>
+              </div>
+
+              <div id="allergy-verdict-box" class="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-950 text-xs leading-relaxed">
+                <b>Contraindicated:</b> All Penicillins, Ampicillin, Amoxicillin, Augmentin, Cloxacillin, and 1st-generation Cephalosporins (Cephalexin shares identical side chain).<br>
+                <b>Permitted / Safe Alternatives:</b> Macrolides (Azithromycin), Doxycycline, Clindamycin, Fluoroquinolones (Ciprofloxacin/Levofloxacin), or Aztreonam.
+              </div>
+
+              <!-- REASONING MATRIX TABLE -->
+              <div class="overflow-x-auto pt-2">
+                <table class="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr class="bg-slate-100 text-slate-700 uppercase tracking-wider border-b">
+                      <th class="p-2 font-bold">Allergy Classification</th>
+                      <th class="p-2 font-bold">Clinical Presentation</th>
+                      <th class="p-2 font-bold">Cephalosporin Safety</th>
+                      <th class="p-2 font-bold">Recommended 1st-Line Substitutes</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y text-slate-700">
+                    <tr class="hover:bg-slate-50">
+                      <td class="p-2 font-bold text-rose-700">Type I IgE Immediate</td>
+                      <td class="p-2">Anaphylaxis, hives within 1 hr, wheezing, angioedema.</td>
+                      <td class="p-2 text-rose-600 font-semibold">Avoid 1st-Gen. 3rd-Gen low risk (&lt;2%).</td>
+                      <td class="p-2">Azithromycin, Doxycycline, Clindamycin.</td>
+                    </tr>
+                    <tr class="hover:bg-slate-50">
+                      <td class="p-2 font-bold text-emerald-700">Non-IgE Mild Delayed</td>
+                      <td class="p-2">Mild maculopapular rash &gt;48 hrs, no systemic symptoms.</td>
+                      <td class="p-2 text-emerald-600 font-semibold">SAFE to use Cephalosporins.</td>
+                      <td class="p-2">Cephalexin, Cefuroxime, Cefixime.</td>
+                    </tr>
+                    <tr class="hover:bg-slate-50">
+                      <td class="p-2 font-bold text-purple-700">SCAR (SJS / TEN / DRESS)</td>
+                      <td class="p-2">Mucosal ulcers, skin peeling, eosinophilia, organ injury.</td>
+                      <td class="p-2 text-rose-700 font-extrabold">STRICTLY FORBIDDEN (All Beta-Lactams).</td>
+                      <td class="p-2">Vancomycin, Doxycycline, Fluoroquinolones.</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+      </section>
+
+      <!-- ==================== TAB 4: LABS & RED FLAGS ==================== -->
+      <section id="tab-content-investigations" class="hidden space-y-6 mobile-center-wrap">
+        
+        <div class="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-sm space-y-4 text-left">
+          <div class="flex flex-col sm:flex-row items-center justify-between border-b pb-3 gap-2 text-center sm:text-left">
+            <div>
+              <h2 class="text-base font-bold text-slate-900 flex items-center justify-center sm:justify-start gap-2">
+                <i data-lucide="flask-conical" class="w-5 h-5 text-sky-600"></i>
+                Infection Biomarkers, Normal Ranges &amp; Red Flag Matrix
+              </h2>
+              <p class="text-xs text-slate-500">MOH Clinical Practice Guidelines • Diagnostic Cut-offs &amp; Hospital Referral Thresholds</p>
+            </div>
+            <span class="text-xs bg-sky-50 text-sky-700 px-3 py-1 rounded-full font-medium border border-sky-200">Point-of-Care Ready</span>
+          </div>
+
+          <div class="overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
+            <table class="w-full text-left text-xs border-collapse min-w-[620px]">
+              <thead>
+                <tr class="bg-slate-100 text-slate-700 uppercase tracking-wider border-b border-slate-200">
+                  <th class="p-3 font-bold">Investigation</th>
+                  <th class="p-3 font-bold">Normal / Target Range</th>
+                  <th class="p-3 font-bold text-rose-600">Critical Red Flag Trigger</th>
+                  <th class="p-3 font-bold">Primary Care Action &amp; Stewardship Guidance</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100 text-slate-700">
+                <tr class="hover:bg-slate-50">
+                  <td class="p-3 font-bold text-slate-900">C-Reactive Protein (CRP)</td>
+                  <td class="p-3">&lt; 5 mg/L (Normal)<br>5 – 20 mg/L (Viral URTI)</td>
+                  <td class="p-3 text-rose-700 font-semibold">
+                    • CRP &gt; 100 mg/L (Severe bacterial / CAP)<br>
+                    • CRP &lt; 20 mg/L in Acute Cough
+                  </td>
+                  <td class="p-3">
+                    <b>CRP &lt;20:</b> Antibiotics will NOT help; reassure patient.<br>
+                    <b>CRP &gt;100:</b> High likelihood of bacterial pneumonia or deep tissue infection. Perform CXR and initiate targeted antibiotics.
+                  </td>
+                </tr>
+                <tr class="hover:bg-slate-50">
+                  <td class="p-3 font-bold text-slate-900">White Cell Count (WCC)</td>
+                  <td class="p-3">4.0 – 10.0 &times; 10⁹/L</td>
+                  <td class="p-3 text-rose-700 font-semibold">
+                    • WCC &gt; 15.0 &times; 10⁹/L (Bandemia &gt;10%)<br>
+                    • WCC &lt; 4.0 &times; 10⁹/L (Leucopenia in sepsis)
+                  </td>
+                  <td class="p-3">
+                    Neutrophilia with toxic granulations indicates acute bacterial infection. If leucopenic and febrile in Malaysia, screen for Dengue (FBC + NS1 RDT) before antibiotics.
+                  </td>
+                </tr>
+                <tr class="hover:bg-slate-50">
+                  <td class="p-3 font-bold text-slate-900">CRB-65 Score (Pneumonia)</td>
+                  <td class="p-3">Score 0: Low Risk (&lt;1% mortality)</td>
+                  <td class="p-3 text-rose-700 font-semibold">
+                    • Score &ge; 1 (Intermediate to High Risk)
+                  </td>
+                  <td class="p-3">
+                    <b>Confusion, RR &ge;30, SBP &lt;90 or DBP &le;60, Age &ge;65:</b><br>
+                    Score 0: Safe for outpatient oral Amoxicillin 1g TDS.<br>
+                    Score &ge;1: Refer hospital ED for admission &amp; parenteral antibiotics.
+                  </td>
+                </tr>
+                <tr class="hover:bg-slate-50">
+                  <td class="p-3 font-bold text-slate-900">Urine Microscopic Examination (UFEME)</td>
+                  <td class="p-3">WBC &lt; 5 / hpf<br>Nitrite Negative</td>
+                  <td class="p-3 text-rose-700 font-semibold">
+                    • Pyuria &gt; 10 WBC/hpf + Nitrite positive<br>
+                    • Casts or Loin tenderness (Pyelonephritis)
+                  </td>
+                  <td class="p-3">
+                    Treat symptomatic cystitis with Nitrofurantoin 100 mg BD x 5d. <b>Do not treat asymptomatic bacteriuria</b> in non-pregnant adults.
+                  </td>
+                </tr>
+                <tr class="hover:bg-slate-50">
+                  <td class="p-3 font-bold text-slate-900">qSOFA Sepsis Screen</td>
+                  <td class="p-3">Score 0</td>
+                  <td class="p-3 text-rose-700 font-semibold">
+                    • qSOFA &ge; 2 (High in-hospital mortality)
+                  </td>
+                  <td class="p-3">
+                    <b>RR &ge;22/min, GCS &lt;15, SBP &le;100 mmHg:</b> Immediate resuscitation (IV crystalloids), high-flow oxygen, stat Ceftriaxone 1g IV if transport &gt;30 min, urgent red-zone transfer.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- ==================== TAB 5: VIRAL CARE & DELAYED PRESCRIPTION LEAFLET ==================== -->
+      <section id="tab-content-delayed" class="hidden space-y-6 mobile-center-wrap">
+        
+        <div class="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6 shadow-sm max-w-4xl mx-auto space-y-6 text-left">
+          <div class="flex flex-col sm:flex-row items-center justify-between border-b pb-4 gap-3 text-center sm:text-left">
+            <div>
+              <h2 class="text-lg font-bold text-slate-900">Bilingual Viral Infection &amp; Delayed Prescription Leaflet</h2>
+              <p class="text-xs text-slate-500">MOH Antibiotic Stewardship Patient Education Sheet • English &amp; Bahasa Melayu</p>
+            </div>
+            <div class="flex items-center justify-center gap-2 no-print w-full sm:w-auto">
+              <button onclick="saveLeafletPdf()" class="flex-1 sm:flex-initial px-3.5 py-2 bg-emerald-700 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 hover:bg-emerald-800 shadow-sm active:scale-95 transition">
+                <i data-lucide="file-down" class="w-3.5 h-3.5"></i> Save PDF
+              </button>
+              <button onclick="printLeaflet()" class="flex-1 sm:flex-initial px-3.5 py-2 bg-slate-900 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 hover:bg-slate-800 shadow-sm active:scale-95 transition">
+                <i data-lucide="printer" class="w-3.5 h-3.5"></i> Print Leaflet
+              </button>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-5 text-xs leading-relaxed">
+            
+            <!-- ENGLISH LEAFLET -->
+            <div class="border rounded-xl p-4 bg-slate-50 space-y-3">
+              <div class="border-b pb-2">
+                <h3 class="font-bold text-sm text-slate-900">Why Antibiotics Won't Help (English)</h3>
+                <p class="text-[11px] text-slate-500">For Colds, Cough, Sore Throat, and Flu</p>
+              </div>
+
+              <div class="p-2.5 bg-emerald-100/60 rounded-lg text-emerald-950 font-bold">
+                YOUR INFECTION IS CAUSED BY A VIRUS:
+              </div>
+
+              <div class="space-y-1">
+                <h4 class="font-bold text-emerald-800">IMPORTANT FACTS:</h4>
+                <ul class="list-disc pl-4 space-y-1 text-slate-700">
+                  <li><b>Antibiotics ONLY kill bacteria.</b> They have zero effect on viruses (cold, flu, Covid-19, bronchitis).</li>
+                  <li>Taking antibiotics unnecessarily causes side effects: diarrhea, stomach upset, severe fungal infections, and dangerous allergic reactions.</li>
+                  <li>Overuse creates <b>Superbugs</b> (antibiotic-resistant bacteria) that may make future infections untreatable for you and your family.</li>
+                </ul>
+              </div>
+
+              <div class="space-y-1 pt-1">
+                <h4 class="font-bold text-emerald-800">EFFECTIVE SYMPTOM RELIEF:</h4>
+                <ul class="list-disc pl-4 space-y-1 text-slate-700">
+                  <li><b>Fever / Sore Throat:</b> Paracetamol 500–1000 mg every 6 hours (max 4 g/day). Warm salt water gargles.</li>
+                  <li><b>Runny Nose / Cough:</b> Saline nasal spray, steam inhalation, warm honey and lemon drinks.</li>
+                  <li><b>Rest & Hydration:</b> Drink at least 2 liters of water daily and rest adequately.</li>
+                </ul>
+              </div>
+
+              <div class="p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-amber-950 text-[11px]">
+                <b>Delayed Prescription (Preskripsi Tertangguh):</b> If your symptoms do not improve after <b>3 days</b>, or if you develop new high fever, contact the clinic to discuss if antibiotics are then required.
+              </div>
+
+              <div class="p-2.5 bg-rose-100/70 border border-rose-200 rounded-lg text-rose-950 text-[11px]">
+                <b>DANGER SIGNS - SEEK IMMEDIATE CARE:</b> Difficulty breathing, swallowing saliva, chest pain, coughing blood, or blue lips.
+              </div>
+            </div>
+
+            <!-- BAHASA MELAYU LEAFLET -->
+            <div class="border rounded-xl p-4 bg-slate-50 space-y-3">
+              <div class="border-b pb-2">
+                <h3 class="font-bold text-sm text-slate-900">Kenapa Antibiotik Tidak Diperlukan (BM)</h3>
+                <p class="text-[11px] text-slate-500">Untuk Selsema, Batuk, Sakit Tekak, dan Demam Virus</p>
+              </div>
+
+              <div class="p-2.5 bg-emerald-100/60 rounded-lg text-emerald-950 font-bold">
+                JANGKITAN ANDA BERPUNCA DARI VIRUS:
+              </div>
+
+              <div class="space-y-1">
+                <h4 class="font-bold text-emerald-800">FAKTA PENTING:</h4>
+                <ul class="list-disc pl-4 space-y-1 text-slate-700">
+                  <li><b>Antibiotik HANYA membunuh bakteria.</b> Ia langsung tidak berkesan terhadap jangkitan virus seperti selsema dan batuk biasa.</li>
+                  <li>Mengambil antibiotik tanpa keperluan mendatangkan kesan sampingan: cirit-birit, alahan kulit, dan gangguan bakteria baik usus.</li>
+                  <li>Penggunaan berlebihan melahirkan <b>Kuman Kebal (Bakteria Rintang)</b> yang sukar diubati pada masa depan.</li>
+                </ul>
+              </div>
+
+              <div class="space-y-1 pt-1">
+                <h4 class="font-bold text-emerald-800">CARA MELEGAKAN SIMPTOM:</h4>
+                <ul class="list-disc pl-4 space-y-1 text-slate-700">
+                  <li><b>Demam / Sakit Tekak:</b> Ambil Paracetamol jika perlu (tidak melebihi 4,000 mg sehari). Kumur air garam suam.</li>
+                  <li><b>Hidung Tersumbat / Batuk:</b> Semburan hidung saline, sedut wap air panas, dan minuman madu suam.</li>
+                  <li><b>Rehat &amp; Minum Air:</b> Minum sekurang-kurangnya 2 liter air kosong sehari dan dapatkan rehat secukupnya.</li>
+                </ul>
+              </div>
+
+              <div class="p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-amber-950 text-[11px]">
+                <b>Preskripsi Tertangguh:</b> Sekiranya keadaan anda tidak bertambah baik selepas <b>3 hari</b>, atau demam semakin tinggi, hubungi klinik semula untuk penilaian antibiotik.
+              </div>
+
+              <div class="p-2.5 bg-rose-100/70 border border-rose-200 rounded-lg text-rose-950 text-[11px]">
+                <b>TANDA BAHAYA - SEGERA KE KECEMASAN:</b> Susah bernafas, tidak boleh menelan air liur, sakit dada, atau batuk berdarah.
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+      </section>
+
+    </main>
+
+    <!-- FLOATING ACTION BUTTON (MOBILE ONLY) -->
+    <div id="m-result-bar" class="sm:hidden fixed inset-x-0 z-[55] flex justify-center px-3" style="bottom: calc(66px + env(safe-area-inset-bottom, 0px));">
+      <button type="button" onclick="document.getElementById('centor-result-card').scrollIntoView({behavior:'smooth',block:'start'})" class="w-full max-w-sm rounded-2xl px-4 py-3 text-sm font-bold text-white shadow-xl flex items-center justify-between bg-emerald-700 active:scale-95 transition-transform backdrop-blur-md">
+        <span id="m-result-text" class="truncate pr-2">Score 2 • Low-Intermediate Risk</span>
+        <span class="text-xs font-semibold bg-white/20 px-2 py-0.5 rounded-full flex-shrink-0">View Plan &rsaquo;</span>
+      </button>
+    </div>
+
+    <!-- DOCKED PHONE BOTTOM NAVIGATION BAR -->
+    <nav id="mobile-nav-bar" class="sm:hidden bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-800">
+      <button onclick="switchTab('centor')" id="m-tab-btn-centor" class="text-emerald-700 font-bold transition">
+        <i data-lucide="calculator"></i>
+        <span>Centor</span>
+      </button>
+      <button onclick="switchTab('lookup')" id="m-tab-btn-lookup" class="text-slate-500 transition">
+        <i data-lucide="search"></i>
+        <span>Lookup</span>
+      </button>
+      <button onclick="switchTab('allergy')" id="m-tab-btn-allergy" class="text-slate-500 transition">
+        <i data-lucide="alert-triangle"></i>
+        <span>Allergy</span>
+      </button>
+      <button onclick="switchTab('investigations')" id="m-tab-btn-investigations" class="text-slate-500 transition">
+        <i data-lucide="flask-conical"></i>
+        <span>Labs</span>
+      </button>
+      <button onclick="switchTab('delayed')" id="m-tab-btn-delayed" class="text-slate-500 transition">
+        <i data-lucide="printer"></i>
+        <span>Leaflet</span>
+      </button>
+    </nav>
+
+    <!-- FOOTER -->
+    <footer class="max-w-7xl mx-auto px-4 pb-6 text-[11px] text-slate-500 leading-relaxed text-center sm:text-left no-print">
+      AntibioticGuard PrimaryCare Suite • Calibrated against the Malaysian National Antimicrobial Guideline (MOH Malaysia) &amp; CPG Upper Respiratory Tract Infections. This clinical decision aid supports rational antimicrobial stewardship and does not replace individualized clinical judgement.
+    </footer>
+  </div>
+
+  <!-- ==========================================
+       APPLICATION LOGIC & DATABASE ENGINE
+       ========================================== -->
+  <script>
+    function switchTab(tabId) {
+      const tabs = ['centor', 'lookup', 'allergy', 'investigations', 'delayed'];
+      tabs.forEach(t => {
+        document.getElementById(`tab-content-${t}`).classList.add('hidden');
+        const btnD = document.getElementById(`tab-btn-${t}-d`);
+        if (btnD) {
+          btnD.classList.remove('bg-white', 'shadow-sm', 'text-slate-900');
+          btnD.classList.add('text-slate-600');
+        }
+        const btnM = document.getElementById(`m-tab-btn-${t}`);
+        if (btnM) {
+          btnM.classList.remove('text-emerald-700', 'font-bold');
+          btnM.classList.add('text-slate-500');
+        }
+      });
+
+      document.getElementById(`tab-content-${tabId}`).classList.remove('hidden');
+      const activeBtnD = document.getElementById(`tab-btn-${tabId}-d`);
+      if (activeBtnD) {
+        activeBtnD.classList.add('bg-white', 'shadow-sm', 'text-slate-900');
+        activeBtnD.classList.remove('text-slate-600');
+      }
+      const activeBtnM = document.getElementById(`m-tab-btn-${tabId}`);
+      if (activeBtnM) {
+        activeBtnM.classList.add('text-emerald-700', 'font-bold');
+        activeBtnM.classList.remove('text-slate-500');
+      }
+
+      const mr = document.getElementById('m-result-bar');
+      if (mr) mr.style.display = (tabId === 'centor') ? 'flex' : 'none';
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    const $ = id => document.getElementById(id);
+    const chk = id => $(id) && $(id).checked;
+
+    // ==========================================
+    // 1. CENTOR / MCISAAC CALCULATOR LOGIC
+    // ==========================================
+    function runCentorCalc() {
+      const ageTier = $('centor-age').value;
+      let score = 0;
+
+      // Age points
+      if (ageTier === 'child') score += 1;
+      else if (ageTier === 'older') score -= 1;
+
+      // Symptom criteria
+      if (chk('c-fever')) score += 1;
+      if (chk('c-no-cough')) score += 1;
+      if (chk('c-nodes')) score += 1;
+      if (chk('c-exudate')) score += 1;
+
+      const card = $('centor-result-card');
+      const badge = $('centor-score-badge');
+      const riskPct = $('centor-risk-pct');
+      const title = $('centor-verdict-title');
+      const desc = $('centor-verdict-desc');
+      const totalDisplay = $('calc-centor-total');
+      const probDisplay = $('calc-centor-prob');
+      const planList = $('centor-plan-list');
+
+      totalDisplay.innerText = `${score} Point${score !== 1 ? 's' : ''}`;
+
+      let actions = [];
+
+      if (score <= 1) {
+        card.className = "bg-emerald-50 border-2 border-emerald-500 rounded-2xl p-4 sm:p-5 shadow-sm transition-all duration-300 text-center sm:text-left";
+        badge.className = "bg-emerald-600 text-white font-bold text-xs uppercase px-3 py-1.5 rounded-lg shadow-sm";
+        badge.innerText = `SCORE ${score} • VERY LOW STREP RISK`;
+        riskPct.innerText = "Strep Risk: 1 – 10%";
+        probDisplay.innerText = "1 – 10%";
+        title.innerText = "Viral Pharyngitis (No Antibiotics)";
+        desc.innerText = "Group A Strep infection is highly improbable (<10%). Antibiotic therapy is NOT recommended by MOH NAG guidelines. Prescribe symptomatic analgesia only.";
+
+        actions.push(`<li class="flex items-start gap-2 text-emerald-950"><i data-lucide="check-circle" class="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5"></i><span><b>Symptomatic Relief Only:</b> Paracetamol 500–1000 mg TDS/QID PRN + Lozenges + warm saline gargles.</span></li>`);
+        actions.push(`<li class="flex items-start gap-2 text-slate-700"><i data-lucide="ban" class="w-4 h-4 text-rose-600 flex-shrink-0 mt-0.5"></i><span><b>Withhold Antibiotics:</b> Do not prescribe Amoxicillin or Augmentin. Reassure patient that viruses resolve in 5–7 days.</span></li>`);
+        actions.push(`<li class="flex items-start gap-2 text-slate-700"><i data-lucide="info" class="w-4 h-4 text-slate-500 flex-shrink-0 mt-0.5"></i><span><b>Safety-Net Advice:</b> Return if unable to swallow, developing stridor, or fever persists >5 days.</span></li>`);
+
+      } else if (score === 2 || score === 3) {
+        card.className = "bg-amber-50 border-2 border-amber-500 rounded-2xl p-4 sm:p-5 shadow-sm transition-all duration-300 text-center sm:text-left";
+        badge.className = "bg-amber-600 text-white font-bold text-xs uppercase px-3 py-1.5 rounded-lg shadow-sm";
+        badge.innerText = `SCORE ${score} • INTERMEDIATE STREP RISK`;
+        riskPct.innerText = score === 2 ? "Strep Risk: 15 – 17%" : "Strep Risk: 28 – 32%";
+        probDisplay.innerText = score === 2 ? "15 – 17%" : "28 – 32%";
+        title.innerText = "Equivocal: Throat Swab or Delayed Script";
+        desc.innerText = "Intermediate probability of GABHS. Perform Rapid Strep Antigen or consider a Delayed Antibiotic Prescription strategy (preskripsi tertangguh).";
+
+        actions.push(`<li class="flex items-start gap-2 text-amber-950 font-semibold"><i data-lucide="test-tube" class="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5"></i><span><b>Preferred:</b> Perform Rapid Strep Antigen Test (RADT) or throat swab if available in clinic.</span></li>`);
+        actions.push(`<li class="flex items-start gap-2 text-slate-700"><i data-lucide="clock" class="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5"></i><span><b>Delayed Prescribing Protocol:</b> Issue script with strict instructions to fill ONLY if no improvement after 48–72 hours.</span></li>`);
+        actions.push(`<li class="flex items-start gap-2 text-slate-700"><i data-lucide="pill" class="w-4 h-4 text-slate-500 flex-shrink-0 mt-0.5"></i><span><b>If Antibiotic Given:</b> Oral Phenoxymethylpenicillin (Pen V) 500 mg QID x 10 days OR Oral Amoxicillin 500 mg BD x 10 days.</span></li>`);
+
+      } else {
+        // Score >= 4
+        card.className = "bg-rose-50 border-2 border-rose-600 rounded-2xl p-4 sm:p-5 shadow-sm transition-all duration-300 text-center sm:text-left";
+        badge.className = "bg-rose-600 text-white font-bold text-xs uppercase px-3 py-1.5 rounded-lg shadow-sm badge-pulse";
+        badge.innerText = `SCORE ${score} • HIGH STREP PROBABILITY`;
+        riskPct.innerText = "Strep Risk: 40 – 60%";
+        probDisplay.innerText = "40 – 60%";
+        title.innerText = "Empiric Antibiotic Therapy Indicated";
+        desc.innerText = "High probability of bacterial GABHS infection. Initiate evidence-based 10-day antibiotic regimen to eradicate carriage and prevent Acute Rheumatic Fever.";
+
+        actions.push(`<li class="flex items-start gap-2 text-rose-950 font-bold"><i data-lucide="pill" class="w-4 h-4 text-rose-600 flex-shrink-0 mt-0.5"></i><span><b>1st-Line (MOH NAG):</b> Oral Phenoxymethylpenicillin (Pen V) 500 mg QID (empty stomach) x 10 DAYS (Complete full course!).</span></li>`);
+        actions.push(`<li class="flex items-start gap-2 text-slate-800"><i data-lucide="pill" class="w-4 h-4 text-rose-600 flex-shrink-0 mt-0.5"></i><span><b>Alternative 1st-Line:</b> Oral Amoxicillin 500 mg BD/TDS (or 1 g BD in adults) x 10 DAYS. Paeds: 50 mg/kg/day divided BD x 10d.</span></li>`);
+        actions.push(`<li class="flex items-start gap-2 text-slate-700"><i data-lucide="alert-circle" class="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5"></i><span><b>Penicillin Allergy:</b> Oral Azithromycin 500 mg OD x 5 days OR Oral Cephalexin 500 mg BD x 10 days (if non-anaphylactic).</span></li>`);
+      }
+
+      $('m-result-text').innerText = badge.innerText.trim();
+      planList.innerHTML = actions.join('');
+      lucide.createIcons();
+    }
+
+    function resetCentorForm() {
+      $('centor-age').value = 'adult';
+      $('c-fever').checked = true;
+      $('c-no-cough').checked = true;
+      $('c-nodes').checked = false;
+      $('c-exudate').checked = false;
+      runCentorCalc();
+    }
+
+    // ==========================================
+    // 2. DISEASE DATABASE & SEARCH ENGINE
+    // ==========================================
+    const diseaseDatabase = [
+      {
+        id: "pharyngitis",
+        name: "Acute Streptococcal Pharyngitis / Tonsillitis",
+        organ: "URTI / Throat",
+        bacterial: "Group A Beta-Hemolytic Streptococcus (GABHS)",
+        firstLine: "Oral Penicillin V 500 mg QID x 10 days OR Oral Amoxicillin 500 mg BD/TDS x 10 days",
+        secondLine: "Penicillin Allergy: Azithromycin 500 mg OD x 5 days OR Cephalexin 500 mg BD x 10 days",
+        paeds: "Amoxicillin 50 mg/kg/day divided BD x 10 days",
+        duration: "10 Days (Mandatory to prevent Acute Rheumatic Fever)",
+        pearls: "Use Centor Score! Do not give antibiotics if Score ≤1. Co-amoxiclav (Augmentin) is NOT first-line for uncomplicated tonsillitis."
+      },
+      {
+        id: "aom",
+        name: "Acute Otitis Media (AOM)",
+        organ: "Ear / ENT",
+        bacterial: "Strep pneumoniae, Haemophilus influenzae, Moraxella",
+        firstLine: "Oral Amoxicillin 80–90 mg/kg/day (Paeds) or 1 g TDS (Adults) x 5–7 days",
+        secondLine: "Treatment failure after 48-72h: Oral Co-amoxiclav (Augmentin) 625 mg TDS",
+        paeds: "High-dose Amoxicillin 80–90 mg/kg/day divided BD/TDS",
+        duration: "5–7 Days (10 days if <2 years or severe perforation)",
+        pearls: "High dose amoxicillin is required to overcome penicillin-resistant Strep pneumoniae in middle ear effusion."
+      },
+      {
+        id: "sinusitis",
+        name: "Acute Bacterial Rhinosinusitis (ABRS)",
+        organ: "Nose / Sinus",
+        bacterial: "S. pneumoniae, H. influenzae",
+        firstLine: "Oral Amoxicillin 500 mg – 1 g TDS x 5–7 days",
+        secondLine: "Oral Co-amoxiclav 625 mg TDS OR Doxycycline 100 mg BD",
+        paeds: "Amoxicillin 50–90 mg/kg/day divided BD/TDS",
+        duration: "5–7 Days",
+        pearls: "Over 90% are VIRAL. Only treat if symptoms persist >10 days without improvement, or 'double-sickening' (worsening after initial recovery)."
+      },
+      {
+        id: "bronchitis",
+        name: "Acute Bronchitis (In Previously Healthy Adult)",
+        organ: "Lower Respiratory",
+        bacterial: ">90% Viral (Influenza, Parainfluenza, RSV, Adenovirus)",
+        firstLine: "ROUTINE ANTIBIOTICS NOT RECOMMENDED (MOH NAG Malaysia)",
+        secondLine: "Symptomatic Care: Inhaled Salbutamol if wheezing, honey-lemon, rest",
+        paeds: "Antibiotics NOT recommended",
+        duration: "0 Days",
+        pearls: "Colored/green sputum reflects neutrophil myeloperoxidase, NOT bacterial infection! Reassure that post-viral cough lasts 2–3 weeks."
+      },
+      {
+        id: "cap",
+        name: "Community-Acquired Pneumonia (CAP) - Outpatient",
+        organ: "Lungs",
+        bacterial: "S. pneumoniae, Mycoplasma, Chlamydia, H. influenzae",
+        firstLine: "Oral Amoxicillin 1 g TDS +/- Oral Azithromycin 500 mg D1, then 250 mg D2–5",
+        secondLine: "Oral Co-amoxiclav 625 mg TDS + Azithromycin OR Oral Doxycycline 100 mg BD",
+        paeds: "Amoxicillin 80–90 mg/kg/day divided BD x 5–7 days",
+        duration: "5–7 Days",
+        pearls: "Check CRB-65! If Score ≥1 (Confusion, RR ≥30, SBP <90/60, Age ≥65), refer hospital ED immediately for admission."
+      },
+      {
+        id: "cystitis",
+        name: "Uncomplicated Acute Cystitis (Adult Female)",
+        organ: "Urinary Tract (UTI)",
+        bacterial: "Escherichia coli, Klebsiella, Staph saprophyticus",
+        firstLine: "Oral Nitrofurantoin 100 mg BD (modified release) x 5 days OR Oral Fosfomycin 3 g stat sachet",
+        secondLine: "Oral Cephalexin 500 mg BD x 5–7 days OR Oral Co-amoxiclav 625 mg BD x 5 days",
+        paeds: "Cephalexin 25–50 mg/kg/day divided TDS",
+        duration: "3–5 Days",
+        pearls: "AVOID Ciprofloxacin/Levofloxacin for simple cystitis! Nitrofurantoin is contraindicated if eGFR <30 mL/min."
+      },
+      {
+        id: "pyelonephritis",
+        name: "Acute Pyelonephritis (Mild / Outpatient)",
+        organ: "Kidney / Upper UTI",
+        bacterial: "E. coli, Proteus, Klebsiella",
+        firstLine: "Oral Ciprofloxacin 500 mg BD x 7 days OR Oral Co-amoxiclav 625 mg TDS x 10–14 days",
+        secondLine: "Initial stat dose of IV/IM Ceftriaxone 1 g, then switch to oral based on C&S",
+        paeds: "Hospital admission required for IV antibiotics",
+        duration: "7–14 Days",
+        pearls: "Check for loin tenderness, high fever, and vomiting. If hemodynamically unstable or septic, refer to hospital immediately."
+      },
+      {
+        id: "cellulitis",
+        name: "Cellulitis & Erysipelas (Non-Purulent)",
+        organ: "Skin / Soft Tissue",
+        bacterial: "Group A Streptococcus, Staphylococcus aureus",
+        firstLine: "Oral Cloxacillin 500 mg QID (empty stomach) x 5–7 days",
+        secondLine: "Oral Cephalexin 500 mg QID OR Oral Clindamycin 300 mg TDS",
+        paeds: "Cloxacillin 50 mg/kg/day divided QID (empty stomach)",
+        duration: "5–7 Days",
+        pearls: "Must take Cloxacillin 1 hour before or 2 hours after meals (food drastically reduces absorption). Mark borders with surgical pen."
+      },
+      {
+        id: "impetigo",
+        name: "Impetigo (Crusted / Bullous)",
+        organ: "Skin (Pediatric/Adult)",
+        bacterial: "Staphylococcus aureus, Strep pyogenes",
+        firstLine: "Topical Mupirocin 2% or Fusidic Acid ointment TDS x 5–7 days",
+        secondLine: "Extensive lesions: Oral Cephalexin 500 mg BD or Oral Cloxacillin 500 mg QID x 7 days",
+        paeds: "Topical first-line; Cephalexin 25–50 mg/kg/day divided BD",
+        duration: "5–7 Days",
+        pearls: "Soak and remove golden crusts with warm saline before applying topical antibiotic ointment."
+      },
+      {
+        id: "bites",
+        name: "Animal & Human Bites (Dog, Cat, Human)",
+        organ: "Infected Wounds",
+        bacterial: "Pasteurella multocida, Eikenella corrodens, Anaerobes, Staph",
+        firstLine: "Oral Co-amoxiclav (Augmentin) 625 mg TDS x 5–7 days",
+        secondLine: "Penicillin Allergy: Oral Doxycycline 100 mg BD + Oral Metronidazole 400 mg TDS",
+        paeds: "Co-amoxiclav 45 mg/kg/day divided BD x 5–7 days",
+        duration: "5–7 Days (Prophylaxis: 3–5 days; Infected: 7–10 days)",
+        pearls: "Cephalexin, Cloxacillin, and Clindamycin do NOT cover Pasteurella multocida! Augmentin is mandatory. Check tetanus status!"
+      },
+      {
+        id: "gastroenteritis",
+        name: "Acute Infectious Diarrhea / Gastroenteritis",
+        organ: "Gastrointestinal",
+        bacterial: ">80% Viral (Rotavirus, Norovirus) or self-limiting",
+        firstLine: "ANTIBIOTICS NOT RECOMMENDED ROUTINELY. Oral Rehydration Salts (ORS) is cornerstone.",
+        secondLine: "Indicated only in severe dysentery (bloody stool + high fever): Oral Azithromycin 500 mg OD x 3d",
+        paeds: "ORS + Zinc supplementation (10-20 mg/day x 14 days)",
+        duration: "0 Days (unless severe culture-proven dysentery)",
+        pearls: "Loperamide is contraindicated in bloody diarrhea or toxic megacolon. Rehydrate aggressively."
+      },
+      {
+        id: "hpylori",
+        name: "Helicobacter pylori Eradication (Standard 1st-Line)",
+        organ: "Gastrointestinal / Stomach",
+        bacterial: "Helicobacter pylori",
+        firstLine: "Standard Triple: PPI (Esomeprazole 20mg BD) + Amoxicillin 1g BD + Clarithromycin 500mg BD x 14 days",
+        secondLine: "Penicillin Allergy: PPI BD + Metronidazole 400mg TDS + Clarithromycin 500mg BD x 14 days",
+        paeds: "Pediatric gastroenterology referral",
+        duration: "14 Days",
+        pearls: "14-day duration has significantly higher eradication rates than 7-day courses in Southeast Asia."
+      }
+    ];
+
+    function renderDiseaseCards(diseases) {
+      const container = $('disease-cards-grid');
+      if (diseases.length === 0) {
+        container.innerHTML = `<div class="col-span-2 p-6 text-center text-slate-500 text-xs">No matching conditions or antibiotics found. Try searching for "cough", "ear", "amoxicillin", or "uti".</div>`;
+        return;
+      }
+
+      container.innerHTML = diseases.map(d => `
+        <div class="p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2 text-left">
+          <div class="flex items-center justify-between">
+            <span class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300">${d.organ}</span>
+            <span class="text-[10px] text-slate-500 font-mono">${d.duration}</span>
+          </div>
+          <h4 class="font-bold text-sm text-slate-900">${d.name}</h4>
+          <p class="text-[11px] text-slate-500 italic">Pathogen: ${d.bacterial}</p>
+
+          <div class="p-2 bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-lg text-xs space-y-0.5">
+            <span class="font-bold text-emerald-900 dark:text-emerald-300 block">1st-Line Regimen:</span>
+            <span class="text-slate-800 dark:text-slate-200 leading-snug">${d.firstLine}</span>
+          </div>
+
+          <div class="p-2 bg-white dark:bg-slate-900 border rounded-lg text-xs space-y-0.5">
+            <span class="font-bold text-slate-700 dark:text-slate-300 block">2nd-Line / Allergy Alt:</span>
+            <span class="text-slate-600 dark:text-slate-400 leading-snug">${d.secondLine}</span>
+          </div>
+
+          <div class="text-[11px] text-slate-600 dark:text-slate-400 pt-1">
+            <b>Pediatric:</b> ${d.paeds}
+          </div>
+
+          <div class="p-2 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-lg text-[11px] text-amber-950 dark:text-amber-200">
+            <b>Stewardship Pearl:</b> ${d.pearls}
+          </div>
+        </div>
+      `).join('');
+      lucide.createIcons();
+    }
+
+    function filterDiseases() {
+      const q = $('disease-search-input').value.toLowerCase();
+      const filtered = diseaseDatabase.filter(d => 
+        d.name.toLowerCase().includes(q) ||
+        d.organ.toLowerCase().includes(q) ||
+        d.bacterial.toLowerCase().includes(q) ||
+        d.firstLine.toLowerCase().includes(q) ||
+        d.pearls.toLowerCase().includes(q)
+      );
+      renderDiseaseCards(filtered);
+    }
+
+    // ==========================================
+    // 3. PENICILLIN ALLERGY ENGINE
+    // ==========================================
+    function runAllergyEval() {
+      const onset = $('allergy-onset').value;
+      const skin = $('allergy-skin').value;
+      const hasWheeze = chk('alg-wheeze');
+      const hasAngio = chk('alg-angio');
+      const hasHypotension = chk('alg-hypotension');
+
+      const isAnaphylactic = (onset === 'immediate') && (hasWheeze || hasAngio || hasHypotension || skin === 'urticaria');
+      const isScar = (skin === 'scar');
+
+      const badge = $('allergy-badge');
+      const cephpBadge = $('cephp-risk-badge');
+      const verdict = $('allergy-verdict-box');
+
+      if (isScar) {
+        badge.className = "bg-purple-800 text-white font-bold text-xs uppercase px-3 py-1 rounded-lg";
+        badge.innerText = "SCAR (SJS / TEN / DRESS) ALLERGY";
+        cephpBadge.innerText = "Beta-Lactams: ABSOLUTELY CONTRAINDICATED";
+        cephpBadge.className = "text-xs font-bold text-rose-700";
+
+        verdict.className = "p-3 bg-purple-50 border border-purple-200 rounded-xl text-purple-950 text-xs leading-relaxed";
+        verdict.innerHTML = `
+          <b>ABSOLUTE CONTRAINDICATION:</b> All Penicillins, Cephalosporins, Carbapenems, and Monobactams.<br>
+          <b>Safe Non-Beta-Lactam Options:</b> Doxycycline, Macrolides (Azithromycin), Clindamycin, Fluoroquinolones (Ciprofloxacin/Levofloxacin), or Vancomycin.
+        `;
+      } else if (isAnaphylactic) {
+        badge.className = "bg-rose-700 text-white font-bold text-xs uppercase px-3 py-1 rounded-lg badge-pulse";
+        badge.innerText = "TRUE TYPE I IgE ANAPHYLAXIS RISK";
+        cephpBadge.innerText = "Avoid 1st-Gen Cephalosporins (Cross-reactivity ~1-2%)";
+        cephpBadge.className = "text-xs font-semibold text-rose-700";
+
+        verdict.className = "p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-950 text-xs leading-relaxed";
+        verdict.innerHTML = `
+          <b>Strictly Avoid:</b> All Penicillins (Amoxicillin, Augmentin, Cloxacillin, Pen V, Ampicillin) and 1st-generation cephalosporins (Cephalexin).<br>
+          <b>Safe Alternatives:</b> Oral Azithromycin, Oral Doxycycline, Oral Clindamycin, or Ciprofloxacin. 3rd-generation cephalosporins (Ceftriaxone) have unique side chains and &lt;1% cross-reactivity if therapy is critical in hospital settings.
+        `;
+      } else if (skin === 'maculopapular' || onset === 'delayed') {
+        badge.className = "bg-emerald-700 text-white font-bold text-xs uppercase px-3 py-1 rounded-lg";
+        badge.innerText = "MILD NON-IgE DELAYED RASH (LOW RISK)";
+        cephpBadge.innerText = "Cephalosporins are SAFE to prescribe";
+        cephpBadge.className = "text-xs font-semibold text-emerald-700";
+
+        verdict.className = "p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-950 text-xs leading-relaxed";
+        verdict.innerHTML = `
+          <b>Cephalosporins SAFE:</b> Patient can safely receive 2nd- and 3rd-generation Cephalosporins (Cefuroxime, Cefixime, Ceftriaxone) and Cephalexin without increased anaphylaxis risk.<br>
+          <b>Non-Beta-Lactam Alternatives:</b> Azithromycin, Doxycycline, or Erythromycin.
+        `;
+      } else {
+        badge.className = "bg-sky-700 text-white font-bold text-xs uppercase px-3 py-1 rounded-lg";
+        badge.innerText = "UNLIKELY ALLERGY (NON-IMMUNE INTOLERANCE)";
+        cephpBadge.innerText = "Full beta-lactam therapy generally safe";
+        cephpBadge.className = "text-xs font-semibold text-sky-700";
+
+        verdict.className = "p-3 bg-sky-50 border border-sky-200 rounded-xl text-sky-950 text-xs leading-relaxed";
+        verdict.innerHTML = `
+          Isolated gastrointestinal upset (nausea, mild diarrhea) is a pharmacological side-effect, not a true drug allergy. Full penicillin or cephalosporin therapy can usually be prescribed with food.
+        `;
+      }
+    }
+
+    // ==========================================
+    // 4. THEME & PDF EXPORT
+    // ==========================================
+    function toggleTheme() {
+      const dark = !document.documentElement.classList.contains('dark');
+      document.documentElement.classList.toggle('dark', dark);
+      try { localStorage.setItem('abx-theme', dark ? 'dark' : 'light'); } catch(e){}
+      syncThemeBtn();
+    }
+    function syncThemeBtn() {
+      const dark = document.documentElement.classList.contains('dark');
+      $('theme-btn').innerHTML = `<i data-lucide="${dark ? 'sun' : 'moon'}" class="w-4 h-4"></i> <span>${dark ? 'Light' : 'Dark'}</span>`;
+      lucide.createIcons();
+    }
+
+    function printLeaflet() {
+      document.body.classList.add('print-leaflet');
+      window.print();
+      setTimeout(() => document.body.classList.remove('print-leaflet'), 500);
+    }
+
+    function saveLeafletPdf() {
+      if (!window.jspdf) { window.print(); return; }
+      const doc = new window.jspdf.jsPDF({ unit: 'pt', format: 'a4' });
+      let y = 50; const L = 48, W = 499;
+
+      const clean = t => String(t).replace(/≥/g, '>=').replace(/≤/g, '<=').replace(/[–—]/g, '-').replace(/[•●]/g, '-').replace(/\s+/g, ' ').trim();
+      const addH = (txt, size=12) => {
+        y += 8; doc.setFont('helvetica', 'bold'); doc.setFontSize(size); doc.setTextColor(5, 150, 105);
+        doc.text(clean(txt), L, y); y += size + 4;
+      };
+      const addP = (txt, bold=false) => {
+        doc.setFont('helvetica', bold ? 'bold' : 'normal'); doc.setFontSize(10); doc.setTextColor(30, 41, 59);
+        doc.splitTextToSize(clean(txt), W).forEach(l => { doc.text(l, L, y); y += 14; });
+        y += 2;
+      };
+
+      addH('Viral Infection Care & Delayed Prescription Leaflet', 16);
+      addP(`MOH Malaysia Antibiotic Stewardship Guidelines • Date: ${new Date().toLocaleDateString('en-GB')}`, true);
+      addP('PATIENT INFORMATION & SAFETY-NET ADVICE SHEET', true);
+
+      addH('1. WHY ANTIBIOTICS ARE NOT PRESCRIBED TODAY');
+      addP('Your illness is caused by a virus (Cold, Flu, Bronchitis). Antibiotics only kill bacteria. Taking them for viral infections exposes you to diarrhea, rashes, and creates antibiotic-resistant superbugs without curing your illness.');
+
+      addH('2. EFFECTIVE SYMPTOM RELIEF AT HOME');
+      addP('Fever & Throat Pain: Paracetamol 500-1000mg every 6 hours PRN (maximum 4000mg per day). Warm salt water gargles.');
+      addP('Cough & Congestion: Saline nasal wash, steam inhalation, and warm honey-lemon drinks.');
+      addP('Hydration: Drink at least 2 liters of water daily and rest adequately.');
+
+      addH('3. DELAYED PRESCRIPTION PROTOCOL (PRESKRIPSI TERTANGGUH)');
+      addP('If your symptoms do NOT begin to improve after 3 days, or if high fever returns, contact the clinic to determine if a secondary bacterial infection has developed.');
+
+      addH('4. EMERGENCY RED FLAGS - SEEK HOSPITAL CARE IMMEDIATELY');
+      addP('Difficulty breathing, inability to swallow your own saliva, blue lips, coughing fresh blood, or chest pain.');
+
+      doc.save(`Viral-Care-Leaflet-${new Date().toISOString().slice(0,10)}.pdf`);
+    }
+
+    // INITIALIZATION
+    window.addEventListener('DOMContentLoaded', () => {
+      syncThemeBtn();
+      lucide.createIcons();
+      runCentorCalc();
+      renderDiseaseCards(diseaseDatabase);
+      runAllergyEval();
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+{
+  "name": "AntibioticGuard MY - Clinical Stewardship & Decision Engine",
+  "description": "MOH NAG & CPG-calibrated primary care & emergency antibiotic stewardship decision support system for Malaysian & Asian clinical settings, featuring Centor/McIsaac scoring, penicillin allergy engine, interactive CPG flowcharts, dosing lookup, offline mode, and AI clinical reasoning copilot.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
